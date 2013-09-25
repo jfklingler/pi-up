@@ -1,0 +1,214 @@
+#!/usr/bin/env python
+
+###############################################################################
+#
+# Pi UP - Raspberry Pi startup notification broadcaster and listener
+# ==================================================================
+#
+# Copyright (C) 2013 by John F. Klingler
+# http://github.com/jfklingler/pi-up
+#
+###############################################################################
+#
+# Licensed under the MIT License (the "License"); you may not use this file
+# except in compliance with the License.
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+# WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+###############################################################################
+
+import socket
+import argparse
+import sys
+import os
+import subprocess
+
+def main(args):
+    parseArgs(args[1:])
+
+    if options.action == ARG_LISTEN:
+        listen()
+    else:
+        broadcast()
+
+def listen():
+    received = 0
+
+    sock = createSocket()
+    try:
+        if options.timeout == 0:
+            sock.setblocking(True)
+        else:
+            sock.settimeout(options.timeout)
+        sock.bind((options.bind_address, options.port))
+
+        print('Listening for Pi-UP broadcasts (press CTRL+C to exit)...\n')
+
+        while options.count == 0 or received < options.count:
+            data = receive(sock)
+            printDatagram(data)
+
+            received += 1
+            if options.count > 0 and received < options.count:
+                print('\nReceived %s broadcast(s). Waiting for %s more...\n' % (received, options.count - received))
+
+    except socket.timeout:
+        print('Timed out.')
+
+    except KeyboardInterrupt:
+        print('Interrupted.')
+
+    finally:
+        closeSocket(sock)
+
+def broadcast():
+    sock = createSocket()
+    try:
+        sock.bind((options.bind_address, options.port))
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.sendto(str(buildDatagram()), ('<broadcast>', options.port))
+
+    except socket.error as e:
+        print('Error sending broadcast:', e.message)
+
+    finally:
+        closeSocket(sock)
+
+
+#
+# Helpers
+#
+
+def createSocket():
+    return socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+def closeSocket(s):
+    try:
+        s.shutdown(0)
+        s.close()
+    except:
+        pass
+
+def receive(sock):
+    BUFFER_SIZE = 1024
+
+    datagram, (source_ip, source_port) = sock.recvfrom(BUFFER_SIZE)
+    data = eval(datagram)
+    data['source'] = source_ip
+
+    return data
+
+def printDatagram(data):
+    print 'Pi UP!'
+    print 'Hostname:\t', data['hostname']
+    print 'Source IP:\t', data['source']
+    print 'Interfaces:'
+    for i in data['interfaces']:
+        print '\t', i['name'], '\t:', i['ip'], '\t(', i['mac'], ')'
+
+def buildDatagram():
+    return {
+        'hostname': socketgethostname(),
+        'interfaces': [{
+            'name': i,
+            'mac': getMAC(i),
+            'ip': getIP(i)} for i in getInterfaces() if getIP(i) != '']}
+
+def getInterfaces():
+    INTERFACE_DIR = '/sys/class/net'
+    return [d for d in os.listdir(INTERFACE_DIR) if os.path.isdir(os.path.join(INTERFACE_DIR, d)) and d != 'lo']
+
+def getIP(interface):
+    return subprocess.check_output("ifconfig %s | grep \"inet addr\" | awk -F: '{print $2}' | awk '{print $1}'" % interface, shell=True).rstrip()
+
+def getMAC(interface):
+    INTERFACE_ADDRESS_FILE = '/sys/class/net/%s/address' % interface
+    try:
+        return open(INTERFACE_ADDRESS_FILE).readline().rstrip()
+    except:
+        return "00:00:00:00:00:00"
+
+
+#
+# Argument handling
+#
+
+ARG_LISTEN = 'listen'
+ARG_BROADCAST = 'broadcast'
+options = argparse.Namespace()
+
+def parseArgs(args):
+    parser = argparse.ArgumentParser(
+        description='Raspberry Pi startup notification broadcaster and listener.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog='The default listen options will wait indefinitely for a single broadcast.')
+
+    parser.add_argument('action', choices=[ARG_BROADCAST, ARG_LISTEN], default='listen')
+
+    generalGroup = parser.add_argument_group('general arguments')
+    generalGroup.add_argument('-p', '--port', type=argPort, default=31415, help='broadcast/listen on port PORT')
+    generalGroup.add_argument('-a', '--bind-address', type=argIPAddress, default='0.0.0.0', help='broadcast/listen on interface BIND_ADDRESS')
+
+    listenGroup = parser.add_argument_group('listen arguments')
+    listenGroup.add_argument('-t', '--timeout', type=argFloatGTE0, default=0, help='wait TIMEOUT seconds for each broadcast, 0 => wait indefinitely')
+    listenGroup.add_argument('-c', '--count', type=argIntGTE0, default=1, help='wait for COUNT broadcasts before termination, 0 => no limit')
+
+    parser.parse_args(args, namespace=options)
+
+def argFloatGTE0(opt):
+    val = float(opt)
+    if val < 0:
+        raise argparse.ArgumentTypeError('%s is not greater than or equal to 0' % opt)
+    return val
+
+def argIntGTE0(opt):
+    val = int(opt)
+    if val < 0:
+        raise argparse.ArgumentTypeError('%s is not greater than or equal to 0' % opt)
+    return val
+
+def argIPAddress(ipAddress):
+    a = ipAddress.split('.')
+    if len(a) != 4:
+        raise argparse.ArgumentTypeError('%s is not a valid IP address (aaa.bbb.ccc.ddd)' % ipAddress)
+    for x in a:
+        if not x.isdigit():
+            raise argparse.ArgumentTypeError('%s is not a valid IP address (aaa.bbb.ccc.ddd)' % ipAddress)
+        i = int(x)
+        if i < 0 or i > 255:
+            raise argparse.ArgumentTypeError('%s is not a valid IP address (aaa.bbb.ccc.ddd)' % ipAddress)
+    return ipAddress
+
+def argPort(port):
+    MAX_PRIV_PORT = 1024
+    MAX_PORT = 65535
+
+    val = int(port)
+    if val <= MAX_PRIV_PORT or val > MAX_PORT:
+        raise argparse.ArgumentTypeError('%s is not a valid, non-privileged port (%s-%s)' % (port, MAX_PRIV_PORT + 1, MAX_PORT))
+    return val
+
+
+#
+# Main entry point
+#
+
+if __name__ == '__main__':
+    main(sys.argv)
