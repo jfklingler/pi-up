@@ -150,25 +150,28 @@ def getMAC(interface):
 # Argument handling
 #
 
+VERSION = '0.1'
 ARG_LISTEN = 'listen'
 ARG_BROADCAST = 'broadcast'
 options = argparse.Namespace()
 
 def parseArgs(args):
+    CR_LINK = '\nCopyright (c) 2013 John F. Klingler\nhttp://github.com/jfklingler/pi-up'
     parser = argparse.ArgumentParser(
-        description='Raspberry Pi startup notification broadcaster and listener.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description='Raspberry Pi startup notification broadcaster and listener.' + CR_LINK,
+        formatter_class=argparse.RawTextHelpFormatter,
         epilog='The default listen options will wait indefinitely for a single broadcast.')
 
     parser.add_argument('action', choices=[ARG_BROADCAST, ARG_LISTEN], default='listen')
+    parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
 
     generalGroup = parser.add_argument_group('general arguments')
     generalGroup.add_argument('-p', '--port', type=argPort, default=31415, help='broadcast/listen on port PORT')
     generalGroup.add_argument('-a', '--bind-address', type=argIPAddress, default='0.0.0.0', help='broadcast/listen on interface BIND_ADDRESS')
 
     listenGroup = parser.add_argument_group('listen arguments')
-    listenGroup.add_argument('-t', '--timeout', type=argFloatGTE0, default=0, help='wait TIMEOUT seconds for each broadcast, 0 => wait indefinitely')
-    listenGroup.add_argument('-c', '--count', type=argIntGTE0, default=1, help='wait for COUNT broadcasts before termination, 0 => no limit')
+    listenGroup.add_argument('-t', '--timeout', type=argFloatGTE0, default=0, help='wait TIMEOUT seconds for each broadcast,\n0 => wait indefinitely')
+    listenGroup.add_argument('-c', '--count', type=argIntGTE0, default=1, help='wait for COUNT broadcasts before termination,\n0 => no limit')
 
     parser.parse_args(args, namespace=options)
 
