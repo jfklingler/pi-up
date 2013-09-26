@@ -19,7 +19,7 @@ get the code on both machines. You can do this in a couple of ways:
 1. Clone the repo
   * `git clone http://github.com/jfklingler/pi-up.git`
 1. Grab the archive and extract it
-  * `curl http://github.com/jfklingler/pi-up/archive/master.zip`
+  * `wget -O pi-up.zip http://github.com/jfklingler/pi-up/archive/master.zip`
 
 You may need to make `pi-up` executable
 ```
@@ -28,18 +28,20 @@ chmod +x pi-up
 
 ### Raspberry Pi
 Pi UP does need to be set up initially with a monitor connected of course. On
-the Raspberry Pi, add the following to /etc/rc.local
+the Raspberry Pi, add the following to /etc/rc.local:
 
 ```
 /path/pi-up broadcast
 ```
 
 ### Client Machine
-Run this on another machine on the same network
+Run this on another machine on the same network:
 
 ```
 pi-up listen
 ```
+This will wait for a broadcast from the Raspberry Pi and print out the details
+of all network interfaces on the Pi. Now just power on the Pi and wait.
 
 ## Errata
 You can get help on the tool's relatively few options at the command line via
