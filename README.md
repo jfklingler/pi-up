@@ -34,6 +34,18 @@ the Raspberry Pi, add the following to /etc/rc.local:
 /path/pi-up broadcast
 ```
 
+If you're DHCP lease assignment and interface startup is a little too slow,
+you might not have a IP assigned by the time rc.local runs. I've found this
+modification to rc.local, while not particularly genius, get's the job done:
+
+```
+_IP=$(hostname -I) || true
+while [ ! "$_IP" ]; do
+  sleep 1
+  _IP=$(hostname -I) || true
+done
+```
+
 ### Client Machine
 Run this on another machine on the same network:
 
