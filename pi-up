@@ -125,7 +125,7 @@ def printDatagram(data):
 
 def buildDatagram():
     return {
-        'hostname': socketgethostname(),
+        'hostname': socket.gethostname(),
         'interfaces': [{
             'name': i,
             'mac': getMAC(i),
